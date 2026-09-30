@@ -11,6 +11,9 @@ from agent.skills.guided_exercises.catalog.types import (
     ExerciseStepDecision,
     StepState,
 )
+from agent.skills.guided_exercises.catalog.definitions.thought_work import (
+    EXERCISE_BEHAVIORAL_EXPERIMENT,
+)
 
 # ── Step-state classifier ──────────────────────────────────────────────
 
@@ -173,6 +176,16 @@ async def classify_step_state(
         current_step=current_step,
     ):
         return "complete"
+
+    # Do not let a model mark a planned experiment as an observed result.
+    if exercise_type == EXERCISE_BEHAVIORAL_EXPERIMENT and current_step.id == "outcome":
+        message = str(state.get("message") or "").casefold()
+        pending_cues = (
+            "还没做", "还没有做", "没试", "没有尝试", "未执行", "尚未", "以后再", "还没开始",
+            "haven't tried", "have not tried", "not tried", "not yet",
+        )
+        if any(cue in message for cue in pending_cues):
+            return "hold"
 
     decision: ExerciseStepDecision = await classifier_llm.generate_structured(
         prompt=_build_step_classifier_prompt(

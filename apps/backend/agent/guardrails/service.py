@@ -81,15 +81,30 @@ class CrisisRiskService:
         """Return the final crisis assessment for one turn."""
 
         if llm_client is None:
-            raise RuntimeError(
-                "CrisisRiskService requires an LLM client for crisis classification."
+            return self._unavailable_result()
+        try:
+            llm_assessment = await assess_crisis_risk_with_llm(
+                state,
+                llm_client=llm_client,
             )
-
-        llm_assessment = await assess_crisis_risk_with_llm(
-            state,
-            llm_client=llm_client,
-        )
+        except Exception:
+            return self._unavailable_result()
         return CrisisRiskResult(
             assessment=enforce_crisis_truth_table(llm_assessment),
             classifier_path="llm_primary",
+        )
+
+    @staticmethod
+    def _unavailable_result() -> CrisisRiskResult:
+        # An unknown assessment must never be converted into a normal route.
+        # Level 1 enters the safety-clarification branch and suspends exercises.
+        return CrisisRiskResult(
+            assessment=CrisisAssessment(
+                level=1,
+                confidence="low",
+                reason="Safety classification unavailable; clarify current safety.",
+                needs_clarification=True,
+            ),
+            classifier_path="classifier_unavailable",
+            llm_failure_occurred=True,
         )

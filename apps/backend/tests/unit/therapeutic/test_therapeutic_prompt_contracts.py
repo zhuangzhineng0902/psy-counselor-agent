@@ -91,10 +91,10 @@ def test_sdk_agent_input_contract_with_history() -> None:
     runtime = OpenAITextRuntime(model="gpt-test")
     prompt = runtime._input_text_for_state(_prompt_state(), include_recent_history=True)  # noqa: SLF001
 
-    assert len(prompt) == 41993
+    assert len(prompt) == 43023
     assert (
         _digest(prompt)
-        == "8c3d0aa17f1b4faa5003e035b7cb1af99367c4a5e9b73fe3cfe85cead42ab4fd"
+        == "fe3d1ac695f57e868db98709c1713f0ab1e6a27eaa65d5aed36f4d33d83c6272"
     )
     sections = [
         "Therapeutic response guidance:",
@@ -130,10 +130,10 @@ def test_sdk_agent_input_contract_without_history() -> None:
         _prompt_state(), include_recent_history=False
     )  # noqa: SLF001
 
-    assert len(prompt) == 41933
+    assert len(prompt) == 42963
     assert (
         _digest(prompt)
-        == "64cbdfa92fb60e3f8db9cb9346213ff999f784b9fdd38ce2b4eb32dd4db64f59"
+        == "ed00b3cc8d112ca0e471b4d5602bbfead63d8c6e220935047a71677ea096605c"
     )
     assert "Presentations make me anxious." not in prompt
     assert "Recent conversation:\n(no prior history)" in prompt
@@ -211,10 +211,10 @@ def test_response_llm_system_instruction_contract() -> None:
         _prompt_state(), include_recent_history=True
     )
 
-    assert len(request.system_instruction) == 41047
+    assert len(request.system_instruction) == 42077
     assert (
         _digest(request.system_instruction)
-        == "8590b5a2fa94d07c0e0c33600ca1aa76c1c0a2236f04ea5f59ccad8590a3742d"
+        == "9eefdf6c9c670e542aa4c360ec733169596b01b574aab3b35b9d07d252ec57c6"
     )
     assert "- response_style: supportive" in request.system_instruction
     assert (
@@ -228,10 +228,10 @@ def test_response_llm_safety_clarification_contract() -> None:
         _dynamic_state(), include_recent_history=True
     )
 
-    assert len(request.system_instruction) == 24073
+    assert len(request.system_instruction) == 25103
     assert (
         _digest(request.system_instruction)
-        == "92a405d270236706ee24d2977a5b695cc75f298c9e8eae5a2433d1100edebf82"
+        == "741d3b6d0cd6a266e00d73bc991a1312981b705a0f5ef905a792063c281ee4d9"
     )
     assert "Safety-check override:" in request.system_instruction
     assert "Include exactly one direct safety question" in request.system_instruction

@@ -78,6 +78,20 @@ async def prepare_guided_exercise_route(
         and exercise_state.get("exercise_type") is not None
         and exercise_state.get("exercise_step") is not None
     )
+    message = str(state.get("message") or "")
+    if has_active_exercise and any(
+        phrase in message for phrase in ("别分析了", "停止练习", "不想继续练习", "只想聊聊")
+    ):
+        apply_state_delta(
+            state,
+            {
+                **clear_exercise_delta(state),
+                "route": "therapeutic",
+                "response_style": "supportive",
+                "turn_lifecycle": {"active_flow": "none", "action": "none"},
+            },
+        )
+        return state, False
     turn_lifecycle = state.get("turn_lifecycle", {}) or {}
     lifecycle_action = (
         turn_lifecycle.get("action") if isinstance(turn_lifecycle, Mapping) else None
@@ -202,6 +216,10 @@ def message_explicitly_requests_guided_exercise(
     text = normalize_message_text(message)
     if not text:
         return False
+    if any(term in text for term in ("想法记录", "呼吸练习", "行为实验", "接地练习")) and any(
+        phrase in text for phrase in ("带我做", "一起做", "开始", "做一个", "做个")
+    ):
+        return True
     request_phrases = (
         "can we do",
         "could we do",

@@ -11,6 +11,8 @@ from agent.audit.crisis_log import InMemoryCrisisLogBackend
 from agent.guardrails.service import CrisisAssessmentSchema
 from agent.guardrails.assessment import assess_crisis_gate
 from agent.runtime import build_initial_state, run_agent
+from agent.runtime.openai_text_runtime import OpenAITextRuntime
+from agent.runtime.types import TextRuntimeChunkEvent, TextRuntimeStateEvent
 from agent.memory.modes import MemoryMode
 from agent.memory.store import Namespace, OpenCouchMemoryStore, StoreRecord
 from agent.models import AgentInput, ResponseCategory
@@ -190,36 +192,65 @@ async def test_assess_crisis_gate_uses_llm_level_for_routing(
 
 @pytest.mark.asyncio
 async def test_assess_crisis_gate_requires_llm_client() -> None:
-    """Without an LLM client, crisis classification should fail visibly."""
+    """Missing safety model must enter clarification, never normal support."""
 
     state = build_initial_state(
         AgentInput(message="I just wish I could disappear for a while."),
         include_input_history=True,
     )
 
-    with pytest.raises(RuntimeError, match="requires an LLM client"):
-        await assess_crisis_gate(
-            state,
-            llm_client=_MockRuntime().context.llm_client,
-        )
+    result = await assess_crisis_gate(state, llm_client=None)
+    assert result.assessment.level == 1
+    assert result.assessment.needs_clarification
+    assert result.delta["crisis_audit"]["crisis_classifier_path"] == "classifier_unavailable"
 
 
 @pytest.mark.asyncio
 async def test_assess_crisis_gate_propagates_llm_failure() -> None:
-    """LLM errors should be left to the caller's retry policy, not hidden."""
+    """Classifier errors must preserve an auditable unknown-risk result."""
 
     state = build_initial_state(
         AgentInput(message="I just wish I could disappear for a while."),
         include_input_history=True,
     )
 
-    with pytest.raises(RuntimeError, match="simulated classifier failure"):
-        await assess_crisis_gate(
+    result = await assess_crisis_gate(state, llm_client=_FailingStructuredLLM())
+    assert result.assessment.level == 1
+    assert result.assessment.needs_clarification
+    assert result.delta["crisis_audit"]["crisis_llm_failure_occurred"] is True
+
+
+@pytest.mark.asyncio
+async def test_classifier_failure_returns_limited_chinese_reply() -> None:
+    result = await run_agent(
+        AgentInput(message="最近学习压力很大，我想找人聊聊。"),
+        llm_client=_FailingStructuredLLM(),
+    )
+    assert result.crisis.level == 1
+    assert result.crisis.needs_clarification
+    assert "安全检查暂时不可用" in result.response_text
+    assert "练习" in result.response_text
+    assert result.should_persist_memory is False
+
+
+@pytest.mark.asyncio
+async def test_classifier_failure_streams_same_limited_reply() -> None:
+    state = build_initial_state(
+        AgentInput(message="失恋后我很难受。"), include_input_history=True
+    )
+    events = [
+        event
+        async for event in OpenAITextRuntime().run_turn_stream(
             state,
-            llm_client=_MockRuntime(
-                llm_client=_FailingStructuredLLM()
-            ).context.llm_client,
+            config={},
+            context=_MockRuntime(llm_client=_FailingStructuredLLM()).context,
         )
+    ]
+    chunks = [event.text for event in events if isinstance(event, TextRuntimeChunkEvent)]
+    final = next(event.state for event in events if isinstance(event, TextRuntimeStateEvent))
+    assert chunks == [final["response_text"]]
+    assert final["crisis"].level == 1
+    assert final["should_persist_memory"] is False
 
 
 @pytest.mark.asyncio

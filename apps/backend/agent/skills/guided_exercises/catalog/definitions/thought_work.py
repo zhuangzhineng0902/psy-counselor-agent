@@ -9,8 +9,8 @@ from agent.skills.guided_exercises.catalog.types import (
 
 
 # ── Simple thought record ────────────────────────────────────────────
-# A simplified 4-step CBT thought record: situation → thought →
-# evidence → alternative. Sequential — each step depends on prior
+# A simplified CBT thought record: situation → thought → evidence for →
+# evidence against or unknown → balanced thought. Each step depends on prior
 # steps. Exit is the only valid off-ramp (no skip).
 
 EXERCISE_THOUGHT_RECORD = "thought_work_simple_record"
@@ -44,15 +44,26 @@ _THOUGHT_RECORD_STEPS: tuple[ExerciseStep, ...] = (
     ),
     ExerciseStep(
         instruction=(
-            "Okay. Now let's look at that thought from the outside for "
-            "a moment. What evidence do you have that it might not be "
-            "the full picture? Even small things count."
+            "What facts support this thought? It may reflect a real concern, "
+            "so let's take the evidence seriously before looking at alternatives."
+        ),
+        id="evidence_for",
+        completion_mode="llm_judged",
+        completion_criteria=(
+            "Complete when the user names supporting facts or explicitly says "
+            "they do not know of any. Do not invent evidence."
+        ),
+    ),
+    ExerciseStep(
+        instruction=(
+            "What facts might point another way, or what is still unknown? "
+            "It's okay if nothing comes to mind; we won't dismiss the facts you shared."
         ),
         id="evidence_against",
         completion_mode="llm_judged",
         completion_criteria=(
-            "Complete when the user offers an exception, missing information, "
-            "alternative interpretation, or evidence that softens the thought."
+            "Complete when the user offers a counterexample, missing information, "
+            "another interpretation, or explicitly says none is known."
         ),
     ),
     ExerciseStep(
@@ -130,8 +141,10 @@ _BEHAVIORAL_EXPERIMENT_STEPS: tuple[ExerciseStep, ...] = (
         id="outcome",
         completion_mode="llm_judged",
         completion_criteria=(
-            "Complete when the user compares what happened with what they "
-            "predicted, or clearly says they have not tried it yet."
+            "Complete only when the user has actually tried the experiment "
+            "and reports an observed outcome. A negative or confirming outcome "
+            "still counts. If they have not tried it, hold this step; if they "
+            "want to abandon it, exit instead."
         ),
     ),
 )
@@ -213,6 +226,7 @@ _CONTINUUM_STEPS: tuple[ExerciseStep, ...] = (
 
 THOUGHT_RECORD_DEFINITION = ExerciseDefinition(
     id=EXERCISE_THOUGHT_RECORD,
+    version=2,
     display_name="a thought record",
     selection_use_case=(
         "examining a distressing thought, belief, assumption, or "

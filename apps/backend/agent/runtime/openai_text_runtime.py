@@ -45,6 +45,7 @@ from agent.runtime.text_turn_graph import (
 from agent.runtime.triage_dispatch import apply_triage_turn_dispatch
 from agent.runtime.types import (
     TextRuntimeConfig,
+    TextRuntimeChunkEvent,
     TextRuntimeStateEvent,
     TextRuntimeStatusEvent,
     TextRuntimeStreamEvent,
@@ -198,6 +199,8 @@ class OpenAITextRuntime:
             )
             plan = self._require_route_plan(route_result)
             self._apply_route_plan_diagnostics(plan)
+            if self._safety_classifier_unavailable(plan):
+                return self._unavailable_safety_reply(plan, streamed=False)
             return await self._execute_route_plan(
                 plan,
                 config=config,
@@ -239,6 +242,12 @@ class OpenAITextRuntime:
             )
             plan = self._require_route_plan(route_result)
             self._apply_route_plan_diagnostics(plan)
+            if self._safety_classifier_unavailable(plan):
+                final_state = self._unavailable_safety_reply(plan, streamed=True)
+                yield TextRuntimeChunkEvent(text=final_state["response_text"])
+                yield TextRuntimeStatusEvent(stage="finalize", turn_finalized=True)
+                yield TextRuntimeStateEvent(state=final_state)
+                return
             for stage in plan.stream_status_stages:
                 yield TextRuntimeStatusEvent(stage=stage)
             async for event in self._stream_route_plan(
@@ -258,6 +267,42 @@ class OpenAITextRuntime:
         if result.plan is None:
             raise RuntimeError("OpenAI text runtime produced an ineligible turn.")
         return result.plan
+
+    @staticmethod
+    def _safety_classifier_unavailable(plan: TextRoutePlan) -> bool:
+        return (
+            plan.state.get("crisis_audit", {}).get("crisis_classifier_path")
+            == "classifier_unavailable"
+        )
+
+    @staticmethod
+    def _unavailable_safety_reply(
+        plan: TextRoutePlan, *, streamed: bool
+    ) -> AgentState:
+        message = str(plan.state.get("message") or "")
+        if any("\u4e00" <= char <= "\u9fff" for char in message):
+            reply = (
+                "我听到了你说的事。现在安全检查暂时不可用，我们先暂停分析和练习。"
+                "你此刻有伤害自己或他人的危险，或正处于不安全的环境中吗？"
+                "如果有迫在眉睫的危险，请立即联系当地紧急服务或身边可信任的人。"
+            )
+        else:
+            reply = (
+                "I hear you. The safety check is temporarily unavailable, so "
+                "let's pause exercises. Are you in immediate danger of hurting "
+                "yourself or someone else, or unsafe where you are? If danger "
+                "is immediate, contact local emergency services or someone "
+                "you trust nearby."
+            )
+        return finalize_openai_turn(
+            plan.state,
+            response_text=reply,
+            runtime_mode="crisis_clarification",
+            response_style="clarifying",
+            selected_agent=plan.selected_agent,
+            sdk_duration_ms=None,
+            streamed=streamed,
+        )
 
     def _apply_route_plan_diagnostics(self, plan: TextRoutePlan) -> None:
         apply_state_delta(
