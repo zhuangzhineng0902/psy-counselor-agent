@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import AsyncIterator, Mapping
 from typing import Any, cast
@@ -140,14 +141,14 @@ class OpenAITextRuntime:
         self,
         *,
         runner: OpenAIAgentsSDKRunner | None = None,
-        model: str = DEFAULT_OPENAI_MODEL,
+        model: str | None = None,
         route_registry_factory: TextRouteRegistryFactory = (
             build_default_text_route_registry
         ),
     ) -> None:
         self._runner = runner or _DEFAULT_OPENAI_RUNNER
-        self._model = model
-        self._roster = build_openai_text_agent_roster(model=model)
+        self._model = model or os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
+        self._roster = build_openai_text_agent_roster(model=self._model)
         self._route_registry = route_registry_factory(self._services)
         self._turn_graph = TextTurnGraph(
             prepare_turn=self._prepare_turn,

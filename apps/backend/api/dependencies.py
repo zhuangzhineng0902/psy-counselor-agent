@@ -40,6 +40,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import logging
 import os
+from urllib.parse import urlparse
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 
@@ -59,6 +60,7 @@ from config import (
     create_configured_control_llm_client,
     create_configured_response_llm_clients,
     get_settings,
+    load_runtime_env,
 )
 from llm.base import BaseLLMClient
 
@@ -110,6 +112,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:  # noqa: ARG001
     """
 
     global _default_memory_mode, _llm_client, _response_llm_clients, _runtimes  # noqa: PLW0603
+
+    load_runtime_env()
+    if (urlparse(os.getenv("OPENAI_BASE_URL", "")).hostname or "") in {
+        "api.minimax.cn",
+        "api.minimax.io",
+    }:
+        # The Agents SDK otherwise sends trace data and the provider key to
+        # OpenAI's tracing endpoint, which cannot authenticate this key.
+        from agents import set_default_openai_api, set_tracing_disabled
+
+        set_tracing_disabled(True)
+        set_default_openai_api("chat_completions")
 
     # Reject an unsupported multi-worker deployment before opening any
     # resources. Runtime mutual exclusion is process-local, and the durable

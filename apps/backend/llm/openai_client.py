@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncIterator
 from typing import Any, cast
+from urllib.parse import urlparse
 
 from openai import AsyncOpenAI
 
@@ -147,6 +148,41 @@ class OpenAILLMClient(BaseLLMClient):
         }
         if use_search:
             kwargs["tools"] = [{"type": "web_search_preview"}]
+
+        # MiniMax exposes a Responses-compatible endpoint but sometimes wraps
+        # JSON-schema output in a Markdown fence. Parse that one compatibility
+        # shape locally, then keep the same Pydantic validation boundary.
+        hostname = urlparse(os.getenv("OPENAI_BASE_URL", "")).hostname or ""
+        if hostname in {"api.minimax.cn", "api.minimax.io"}:
+            format_spec = {
+                "type": "json_schema",
+                "name": response_schema.__name__,
+                "schema": response_schema.model_json_schema(),
+                "strict": True,
+            }
+            response = await self.client.responses.create(
+                model=self.model,
+                input=[
+                    *input_items,
+                    {
+                        "role": "system",
+                        "content": (
+                            "Return only one JSON object with exactly these fields: "
+                            + ", ".join(response_schema.model_fields)
+                            + ". Follow the JSON schema; do not add explanations "
+                            "or Markdown fences."
+                        ),
+                    },
+                ],
+                text={"format": format_spec},
+                **({"tools": kwargs["tools"]} if use_search else {}),
+            )
+            raw_text = (response.output_text or "").strip()
+            if raw_text.startswith("```json") and raw_text.endswith("```"):
+                raw_text = raw_text[7:-3].strip()
+            elif raw_text.startswith("```") and raw_text.endswith("```"):
+                raw_text = raw_text[3:-3].strip()
+            return response_schema.model_validate_json(raw_text)
 
         response = await self.client.responses.parse(**kwargs)
 

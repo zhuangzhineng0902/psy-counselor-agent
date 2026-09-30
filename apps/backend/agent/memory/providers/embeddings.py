@@ -354,6 +354,9 @@ def create_configured_embedding_provider() -> EmbeddingProvider:
         EmbeddingProvider: OpenAI or null provider based on env config.
     """
 
+    if os.getenv("OPENCOUCH_DISABLE_EMBEDDINGS") == "1":
+        return NullEmbeddingProvider()
+
     if os.getenv("OPENAI_API_KEY"):
         try:
             return OpenAIEmbeddingProvider(

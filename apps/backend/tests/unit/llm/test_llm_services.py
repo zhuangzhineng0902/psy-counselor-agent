@@ -10,6 +10,7 @@ import pytest
 from llm.factory import create_llm_client
 from llm.openai_client import DEFAULT_OPENAI_MODEL
 from llm.openai_client import OpenAILLMClient
+from pydantic import BaseModel
 
 
 class _FakeResponses:
@@ -137,3 +138,38 @@ def test_create_llm_client_rejects_unknown_provider() -> None:
 
     with pytest.raises(ValueError, match="Unsupported LLM provider"):
         create_llm_client(provider="anthropic")  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_minimax_structured_response_accepts_fenced_json(monkeypatch) -> None:
+    class Decision(BaseModel):
+        level: int
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://api.minimax.cn/v1")
+    monkeypatch.setattr("llm.openai_client.AsyncOpenAI", _FakeAsyncOpenAI)
+    client = OpenAILLMClient(api_key="test-key", model="MiniMax-M3")
+
+    async def create(**kwargs: Any) -> SimpleNamespace:
+        assert kwargs["text"]["format"]["type"] == "json_schema"
+        return SimpleNamespace(output_text='```json\n{"level": 1}\n```')
+
+    client.client.responses.create = create
+    result = await client.generate_structured(prompt="classify", response_schema=Decision)
+    assert result.level == 1
+
+
+@pytest.mark.asyncio
+async def test_minimax_structured_response_rejects_invalid_payload(monkeypatch) -> None:
+    class Decision(BaseModel):
+        level: int
+
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://api.minimax.cn/v1")
+    monkeypatch.setattr("llm.openai_client.AsyncOpenAI", _FakeAsyncOpenAI)
+    client = OpenAILLMClient(api_key="test-key", model="MiniMax-M3")
+
+    async def create(**kwargs: Any) -> SimpleNamespace:
+        return SimpleNamespace(output_text='```json\n{"wrong": 1}\n```')
+
+    client.client.responses.create = create
+    with pytest.raises(ValueError):
+        await client.generate_structured(prompt="classify", response_schema=Decision)

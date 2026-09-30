@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from typing import Any, Sequence
+from urllib.parse import urlparse
 
-from agents import Agent
+from agents import Agent, ModelSettings
+from openai import AsyncOpenAI
 
 from llm.openai_client import DEFAULT_OPENAI_MODEL
+from llm.minimax_agents_model import MiniMaxChatCompletionsModel
 from agent.runtime.context import OpenAITextRunContext
 
 
@@ -29,11 +33,24 @@ def build_agent(
 ) -> Agent[OpenAITextRunContext]:
     """Build an OpenAI Agents SDK agent from OpenCouch metadata."""
 
+    minimax = (urlparse(os.getenv("OPENAI_BASE_URL", "")).hostname or "") in {
+        "api.minimax.cn",
+        "api.minimax.io",
+    }
     return Agent[OpenAITextRunContext](
         name=definition.name,
         handoff_description=definition.handoff_description,
         instructions=definition.instructions,
-        model=model,
+        model=(
+            MiniMaxChatCompletionsModel(model=model, openai_client=AsyncOpenAI())
+            if minimax
+            else model
+        ),
+        model_settings=(
+            ModelSettings(extra_body={"thinking": {"type": "disabled"}})
+            if minimax
+            else ModelSettings()
+        ),
         tools=list(tools or ()),
         output_type=output_type,
     )

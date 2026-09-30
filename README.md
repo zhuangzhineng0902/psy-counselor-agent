@@ -107,6 +107,22 @@ For a no-key deterministic smoke test, run `./scripts/text_tui.sh --mode determi
 
 OpenCouch loads local environment files from the repo root and `apps/backend` (`.env`, then `.env.local`). Deterministic mode does not need external API keys. Real model runs need an OpenAI API key.
 
+For a local MiniMax text session, put the following in the repo root `.env.local` (keep the key private):
+
+```env
+OPENAI_API_KEY=your_minimax_api_key
+OPENAI_BASE_URL=https://api.minimax.cn/v1
+LLM_PROVIDER=openai
+OPENAI_MODEL=MiniMax-M3
+RESPONSE_FAST_OPENAI_MODEL=MiniMax-M3
+RESPONSE_QUALITY_OPENAI_MODEL=MiniMax-M3
+OPENCOUCH_MEMORY_MODE=incognito
+OPENCOUCH_TEXT_SESSION_BACKEND=disabled
+OPENCOUCH_DISABLE_EMBEDDINGS=1
+```
+
+MiniMax uses the OpenAI-compatible API path here. The app's normal text chat has been smoke-tested through both HTTP and WebSocket. Voice, hosted search tools, and persistent memory are not covered by this configuration; incognito mode does not retain long-term memory. Set `NEXT_PUBLIC_API_URL=http://localhost:8080/api` in `apps/web/.env.local` when the API runs on port 8080. Restart the backend after changing model settings.
+
 <details>
 <summary><b>View Environment Setup Details</b></summary>
 

@@ -23,6 +23,15 @@ def test_missing_openai_key_selects_null_embedding_provider(monkeypatch) -> None
     assert isinstance(provider, NullEmbeddingProvider)
 
 
+def test_explicit_embedding_disable_keeps_minimax_key_out_of_embedding_api(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "minimax-test-key")
+    monkeypatch.setenv("OPENCOUCH_DISABLE_EMBEDDINGS", "1")
+
+    provider = create_configured_embedding_provider()
+
+    assert isinstance(provider, NullEmbeddingProvider)
+
+
 @pytest.mark.asyncio
 async def test_openai_provider_requests_configured_dimensions() -> None:
     """Configured dimensions are sent to OpenAI instead of only validated later."""
